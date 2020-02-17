@@ -14,14 +14,11 @@ import (
 )
 
 type Server struct {
-	collator *core.Collator
-	server   *http.Server
+	server *http.Server
 }
 
-func New(conf config.Server, collator *core.Collator) (*Server, error) {
-	ret := &Server{
-		collator: collator,
-	}
+func New(conf config.Server, collator *core.Collator, cache *core.Cache) (*Server, error) {
+	ret := &Server{}
 
 	auth, err := NewAuthorizer(conf.Auth)
 	if err != nil {
@@ -30,7 +27,7 @@ func New(conf config.Server, collator *core.Collator) (*Server, error) {
 
 	ret.server = &http.Server{
 		Addr:              fmt.Sprintf("0.0.0.0:%d", conf.Port),
-		Handler:           ret.newRouter(auth, ret.collator),
+		Handler:           ret.newRouter(auth, collator, cache),
 		ReadHeaderTimeout: 15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 	}
@@ -61,7 +58,7 @@ func (s *Server) shouldUseTLS(cert, key string) (should bool, err error) {
 	return
 }
 
-func (s *Server) newRouter(auth Authorizer, col *core.Collator) http.Handler {
+func (s *Server) newRouter(auth Authorizer, col *core.Collator, cache *core.Cache) http.Handler {
 	ret := mux.NewRouter()
 
 	notFoundHandler := NewAPINotFound()
@@ -70,6 +67,7 @@ func (s *Server) newRouter(auth Authorizer, col *core.Collator) http.Handler {
 
 	ret.Handle("/v1/info", NewAPIInfo(version.Version, auth.TypeName()))
 	ret.Handle("/v1/deployment-groups", auth.Auth(NewAPIGroups(col)))
+	ret.Handle("/v1/directors", auth.Auth(NewAPIDirectors(cache)))
 
 	return ret
 }
