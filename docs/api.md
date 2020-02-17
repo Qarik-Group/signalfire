@@ -1,3 +1,5 @@
+# SignalFire HTTP API
+
 ## GET /v1/info
 
 ```json
@@ -9,7 +11,7 @@
 
 ## GET /v1/deployment-groups
 
-### Response:
+### Response
 
 ```json
 {
@@ -64,9 +66,9 @@
 }
 ```
 
-### GET /v1/directors
+## GET /v1/directors
 
-## Response
+### Response
 
 ```json
 {
