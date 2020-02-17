@@ -1,3 +1,12 @@
+## GET /v1/info
+
+```json
+{
+  "version": "0.0.1",
+  "auth_type": "basic"
+}
+```
+
 ## GET /v1/deployment-groups
 
 ### Response:
