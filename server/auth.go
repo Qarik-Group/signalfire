@@ -13,6 +13,10 @@ import (
 	"github.com/starkandwayne/signalfire/log"
 )
 
+const (
+	AuthCookieName = "signalfire-session"
+)
+
 type Authorizer interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 	TypeName() string
@@ -44,10 +48,16 @@ func NewAuthorizer(conf config.Auth, t *tokenChecker) (auth Authorizer, err erro
 }
 
 func writeSessionResponse(w http.ResponseWriter, t *tokenChecker) {
-	sessionToken, err := t.newSession()
+	sessionToken, expiry, err := t.newSession()
 	if err != nil {
 		writeResponse(w, http.StatusInternalServerError, APIError{Error: err.Error()})
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:    AuthCookieName,
+		Value:   sessionToken,
+		Path:    "/",
+		Expires: expiry,
+	})
 	writeResponse(w, http.StatusOK, AuthTokenResponse{Token: sessionToken})
 }
 
@@ -127,12 +137,12 @@ func newTokenChecker(cfg tokenCheckerConfig) *tokenChecker {
 	}
 }
 
-func (t *tokenChecker) newSession() (string, error) {
+func (t *tokenChecker) newSession() (string, time.Time, error) {
 	randomValue := make([]byte, 16)
 	_, err := rand.Read(randomValue)
 	if err != nil {
 		t.logger.Error("Could not generate random bits for auth session token: %s", err)
-		return "", err
+		return "", time.Time{}, err
 	}
 
 	sessionToken := base64.RawStdEncoding.EncodeToString(randomValue)
@@ -140,7 +150,7 @@ func (t *tokenChecker) newSession() (string, error) {
 	t.lock.Lock()
 	t.sessions[sessionToken] = expiryTime
 	t.lock.Unlock()
-	return sessionToken, nil
+	return sessionToken, expiryTime, nil
 }
 
 func (t *tokenChecker) validate(token string) bool {
@@ -165,6 +175,13 @@ func (t *tokenChecker) wrap(h http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			sessionToken := r.Header.Get("Signalfire-Session")
+			if sessionToken == "" {
+				cookie, err := r.Cookie(AuthCookieName)
+				if err == nil {
+					sessionToken = cookie.Value
+				}
+			}
+
 			if !t.validate(sessionToken) {
 				writeResponse(w, http.StatusUnauthorized, APIError{
 					Error: "Auth token invalid",
