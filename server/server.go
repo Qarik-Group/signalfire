@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/starkandwayne/signalfire/config"
 	"github.com/starkandwayne/signalfire/core"
+	"github.com/starkandwayne/signalfire/log"
 	"github.com/starkandwayne/signalfire/version"
 )
 
@@ -17,17 +18,27 @@ type Server struct {
 	server *http.Server
 }
 
-func New(conf config.Server, collator *core.Collator, cache *core.Cache) (*Server, error) {
+type Components struct {
+	Collator *core.Collator
+	Cache    *core.Cache
+	Log      *log.Logger
+}
+
+func New(conf config.Server, components Components) (*Server, error) {
 	ret := &Server{}
 
-	auth, err := NewAuthorizer(conf.Auth)
+	tokenChecker := newTokenChecker(tokenCheckerConfig{
+		Logger:          components.Log,
+		SessionDuration: 30 * time.Minute,
+	})
+	auth, err := NewAuthorizer(conf.Auth, tokenChecker)
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing server auth: %s", err)
 	}
 
 	ret.server = &http.Server{
 		Addr:              fmt.Sprintf("0.0.0.0:%d", conf.Port),
-		Handler:           ret.newRouter(auth, collator, cache),
+		Handler:           ret.newRouter(auth, tokenChecker, components),
 		ReadHeaderTimeout: 15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 	}
@@ -37,6 +48,7 @@ func New(conf config.Server, collator *core.Collator, cache *core.Cache) (*Serve
 		return nil, err
 	}
 	if shouldTLS {
+		components.Log.Info("Configuring TLS for HTTP server")
 		ret.server.TLSConfig, err = ret.newTLSConfig(conf)
 		if err != nil {
 			return nil, fmt.Errorf("Could not configure TLS: %s", err)
@@ -58,16 +70,17 @@ func (s *Server) shouldUseTLS(cert, key string) (should bool, err error) {
 	return
 }
 
-func (s *Server) newRouter(auth Authorizer, col *core.Collator, cache *core.Cache) http.Handler {
+func (s *Server) newRouter(auth Authorizer, t *tokenChecker, components Components) http.Handler {
 	ret := mux.NewRouter()
 
 	notFoundHandler := NewAPINotFound()
 	ret.NotFoundHandler = notFoundHandler
 	ret.MethodNotAllowedHandler = notFoundHandler
 
-	ret.Handle("/v1/info", NewAPIInfo(version.Version, auth.TypeName()))
-	ret.Handle("/v1/deployment-groups", auth.Auth(NewAPIGroups(col)))
-	ret.Handle("/v1/directors", auth.Auth(NewAPIDirectors(cache)))
+	ret.Handle("/v1/info", NewAPIInfo(version.Version, auth.TypeName())).Methods("GET")
+	ret.Handle("/v1/auth", auth).Methods("POST")
+	ret.Handle("/v1/deployment-groups", t.wrap(NewAPIGroups(components.Collator))).Methods("GET")
+	ret.Handle("/v1/directors", t.wrap(NewAPIDirectors(components.Cache))).Methods("GET")
 
 	return ret
 }

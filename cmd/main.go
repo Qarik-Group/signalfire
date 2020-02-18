@@ -73,7 +73,11 @@ func main() {
 	scheduler.Start()
 
 	//Start up the HTTP API
-	serv, err := server.New(cfg.Server, collator, cache)
+	serv, err := server.New(cfg.Server, server.Components{
+		Collator: collator,
+		Cache:    cache,
+		Log:      &logger,
+	})
 	if err != nil {
 		logger.Fatal("Could not initialize server: %s", err)
 	}
