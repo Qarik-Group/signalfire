@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -43,6 +45,8 @@ func New(conf config.Server, components Components) (*Server, error) {
 		ReadHeaderTimeout: 15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 	}
+
+	ret.addDevWebRoutes(ret.server.Handler.(*mux.Router), conf.Dev.WebMappings)
 
 	shouldTLS, err := ret.shouldUseTLS(conf.TLS.Certificate, conf.TLS.PrivateKey)
 	if err != nil {
@@ -84,6 +88,19 @@ func (s *Server) newRouter(auth Authorizer, t *tokenChecker, components Componen
 	ret.Handle("/v1/directors", t.wrap(NewAPIDirectors(components.Cache))).Methods("GET")
 
 	return ret
+}
+
+func (s *Server) addDevWebRoutes(router *mux.Router, mappings []config.WebDevMapping) {
+	for _, mapping := range mappings {
+		filePath, err := filepath.Abs(mapping.File)
+		if err != nil {
+			s.logger.Fatal("Could not get absolute path for filepath `%s': %s", mapping.File, err)
+		}
+		servePath := "/" + strings.TrimLeft(mapping.ServePath, "/")
+		s.logger.Info("Serving dev route\n\tpath: `%s'\n\tfile: `%s'\n\tmimeType: `%s'",
+			servePath, filePath, mapping.MimeType)
+		router.Handle(servePath, newAPIWebDev(filePath, mapping.MimeType))
+	}
 }
 
 func (s *Server) newTLSConfig(conf config.Server) (*tls.Config, error) {

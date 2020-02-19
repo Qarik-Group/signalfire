@@ -38,6 +38,9 @@ type Server struct {
 	} `yaml:"tls"`
 	Auth Auth   `yaml:"auth"`
 	Port uint16 `yaml:"port"`
+	Dev  struct {
+		WebMappings []WebDevMapping `yaml:"web_mappings"`
+	} `yaml:"dev"`
 }
 
 type Auth struct {
@@ -48,6 +51,12 @@ type Auth struct {
 
 type Log struct {
 	Level string `yaml:"level"`
+}
+
+type WebDevMapping struct {
+	File      string `yaml:"file"`
+	ServePath string `yaml:"serve_path"`
+	MimeType  string `yaml:"mime_type"`
 }
 
 var DefaultConfig = Config{
