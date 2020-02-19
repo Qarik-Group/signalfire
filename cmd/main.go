@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"time"
@@ -38,6 +39,12 @@ func main() {
 		logger.Fatal("Error parsing config YAML at `%s': %s", cfgPath, err)
 	}
 
+	logLevel, err := parseLogLevel(cfg.Log.Level)
+	if err != nil {
+		logger.Fatal("Error parsing log level: %s", err.Error())
+	}
+	logger.SetLogLevel(logLevel)
+
 	//BOSH PARSING
 	boshes := make([]core.BOSH, 0, len(cfg.Targets))
 	for _, t := range cfg.Targets {
@@ -59,7 +66,7 @@ func main() {
 
 	//Configure the core logic orchestration
 	cache := core.NewCache()
-	collator := core.NewCollator()
+	collator := core.NewCollator(&logger)
 	//TODO: Make the rules configurable
 	collator.AddRule(core.DeploymentRegexCaptureRule{Match: regexp.MustCompile(`.*-(.*)`)})
 	collator.AddRule(core.DeploymentRegexCaptureRule{Match: regexp.MustCompile(`(.*)`)})
@@ -87,4 +94,21 @@ func main() {
 		logger.Fatal("Server exited: %s", err)
 	}
 
+}
+
+func parseLogLevel(level string) (ret uint, err error) {
+	switch level {
+	case config.LogLevelDebug:
+		ret = log.LevelDebug
+	case config.LogLevelInfo:
+		ret = log.LevelInfo
+	case config.LogLevelError:
+		ret = log.LevelError
+	case config.LogLevelFatal:
+		ret = log.LevelFatal
+	default:
+		err = fmt.Errorf("Unknown log level `%s'", level)
+	}
+
+	return
 }

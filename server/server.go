@@ -16,6 +16,7 @@ import (
 
 type Server struct {
 	server *http.Server
+	logger *log.Logger
 }
 
 type Components struct {
@@ -25,7 +26,7 @@ type Components struct {
 }
 
 func New(conf config.Server, components Components) (*Server, error) {
-	ret := &Server{}
+	ret := &Server{logger: components.Log}
 
 	tokenChecker := newTokenChecker(tokenCheckerConfig{
 		Logger:          components.Log,
@@ -99,8 +100,10 @@ func (s *Server) newTLSConfig(conf config.Server) (*tls.Config, error) {
 
 func (s *Server) Run() error {
 	if s.server.TLSConfig == nil {
+		s.logger.Info("Starting up HTTP server (non-TLS)")
 		return s.server.ListenAndServe()
 	}
+	s.logger.Info("Starting up HTTPS server (using TLS)")
 	return s.server.ListenAndServeTLS("", "")
 }
 

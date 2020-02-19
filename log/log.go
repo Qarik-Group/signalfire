@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	LevelError uint = iota
+	LevelFatal uint = iota
+	LevelError
 	LevelInfo
 	LevelDebug
 )
@@ -21,29 +22,33 @@ type Logger struct {
 }
 
 func (l *Logger) Fatal(f string, a ...interface{}) {
-	l.write("FATAL", f, a...)
+	l.write(LevelFatal, "FATAL", f, a...)
 	os.Exit(1)
 }
 
 func (l *Logger) Error(f string, a ...interface{}) {
-	l.write("ERROR", f, a...)
+	l.write(LevelError, "ERROR", f, a...)
 }
 
 func (l *Logger) Info(f string, a ...interface{}) {
-	if l.Level >= LevelInfo {
-		l.write(" INFO", f, a...)
-	}
+	l.write(LevelInfo, "_INFO", f, a...)
 }
 
 func (l *Logger) Debug(f string, a ...interface{}) {
-	if l.Level >= LevelDebug {
-		l.write("DEBUG", f, a...)
-	}
+	l.write(LevelDebug, "DEBUG", f, a...)
 }
 
-func (l *Logger) write(label, f string, a ...interface{}) {
+func (l *Logger) write(level uint, label, f string, a ...interface{}) {
 	l.lock.Lock()
-	fmt.Fprintf(l.Output, "%s: %s: "+f+"\n",
-		append([]interface{}{time.Now().Format(time.RFC3339), label}, a...)...)
+	if l.Level >= level {
+		fmt.Fprintf(l.Output, "%s; %s; "+f+"\n",
+			append([]interface{}{label, time.Now().Format(time.RFC3339)}, a...)...)
+	}
+	l.lock.Unlock()
+}
+
+func (l *Logger) SetLogLevel(level uint) {
+	l.lock.Lock()
+	l.Level = level
 	l.lock.Unlock()
 }

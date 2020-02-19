@@ -3,13 +3,22 @@ package config
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"gopkg.in/yaml.v2"
+)
+
+const (
+	LogLevelDebug = "debug"
+	LogLevelInfo  = "info"
+	LogLevelError = "error"
+	LogLevelFatal = "fatal"
 )
 
 type Config struct {
 	Targets []BOSH `yaml:"targets"`
 	Server  Server `yaml:"server"`
+	Log     Log    `yaml:"log"`
 }
 type BOSH struct {
 	URL                string `yaml:"url"`
@@ -37,6 +46,10 @@ type Auth struct {
 	Password string `yaml:"password"`
 }
 
+type Log struct {
+	Level string `yaml:"level"`
+}
+
 var DefaultConfig = Config{
 	Server: Server{
 		Port: 11001,
@@ -46,6 +59,7 @@ var DefaultConfig = Config{
 			Password: "password",
 		},
 	},
+	Log: Log{Level: "info"},
 }
 
 func Parse(r io.Reader) (*Config, error) {
@@ -60,5 +74,6 @@ func Parse(r io.Reader) (*Config, error) {
 			t.PollInterval = 30
 		}
 	}
+	ret.Log.Level = strings.ToLower(ret.Log.Level)
 	return &ret, nil
 }
