@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -31,14 +32,10 @@ func NewAuthorizer(conf config.Auth, t *tokenChecker) (auth Authorizer, err erro
 	switch strings.ToLower(conf.Type) {
 	case "none", "noop":
 		auth = newNoopAuthorizer(t)
-	case "basic":
-		if conf.Realm == "" {
-			conf.Realm = "SignalFire"
-		}
-		auth = newBasicAuthorizer(t, basicAuthorizerConfig{
+	case "userpass":
+		auth = newUserpassAuthorizer(t, userpassAuthorizerConfig{
 			Username: conf.Username,
 			Password: conf.Password,
-			Realm:    conf.Realm,
 		})
 	default:
 		err = fmt.Errorf("Unknown auth type: %s", conf.Type)
@@ -79,43 +76,48 @@ func (n *NoopAuthorizer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (*NoopAuthorizer) TypeName() string { return "none" }
 
-type BasicAuthorizer struct {
+type UserpassAuthorizer struct {
 	username string
 	password string
-	realm    string
 	t        *tokenChecker
 }
 
-type basicAuthorizerConfig struct {
+type userpassAuthorizerConfig struct {
 	Username string
 	Password string
-	Realm    string
 }
 
-func newBasicAuthorizer(t *tokenChecker, cfg basicAuthorizerConfig) *BasicAuthorizer {
-	return &BasicAuthorizer{
+func newUserpassAuthorizer(t *tokenChecker, cfg userpassAuthorizerConfig) *UserpassAuthorizer {
+	return &UserpassAuthorizer{
 		username: cfg.Username,
 		password: cfg.Password,
-		realm:    cfg.Realm,
 		t:        t,
 	}
 }
 
-func (b *BasicAuthorizer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	username, password, isBasicAuth := r.BasicAuth()
-	if !isBasicAuth {
-		w.Header().Add("WWW-Authenticate", b.realm)
-		writeResponse(w, http.StatusUnauthorized, APIError{Error: "No valid basic auth provided"})
+type UserpassAuthRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (b *UserpassAuthorizer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	requestParameters := UserpassAuthRequest{}
+	jsonDec := json.NewDecoder(r.Body)
+	err := jsonDec.Decode(&requestParameters)
+	if err != nil {
+		writeResponse(w, http.StatusBadRequest, APIError{Error: "JSON request body could not be parsed"})
 		return
 	}
-	if username != b.username || password != b.password {
+
+	if requestParameters.Username != b.username || requestParameters.Password != b.password {
 		writeResponse(w, http.StatusForbidden, APIError{Error: "Incorrect username or password"})
 		return
 	}
+
 	writeSessionResponse(w, b.t)
 }
 
-func (*BasicAuthorizer) TypeName() string { return "basic" }
+func (*UserpassAuthorizer) TypeName() string { return "userpass" }
 
 type tokenChecker struct {
 	sessions   map[string]time.Time

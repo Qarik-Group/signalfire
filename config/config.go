@@ -35,17 +35,15 @@ type Auth struct {
 	Type     string `yaml:"type"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
-	Realm    string `yaml:"realm"`
 }
 
 var DefaultConfig = Config{
 	Server: Server{
 		Port: 11001,
 		Auth: Auth{
-			Type:     "basic",
+			Type:     "userpass",
 			Username: "admin",
 			Password: "password",
-			Realm:    "SignalFire",
 		},
 	},
 }
